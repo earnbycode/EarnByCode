@@ -30,7 +30,7 @@ router.get('/google', (req, res, next) => {
 // Custom error handler for OAuth failures
 const handleOAuthError = (req, res, error) => {
   console.error('OAuth Error:', error);
-  const frontendUrl = config.FRONTEND_URL || 'http://localhost:5173';
+  const frontendUrl = config.FRONTEND_URL || 'https://earnbycode.vercel.app/';
   const errorMessage = encodeURIComponent(error.message || 'Authentication failed');
   // Try to detect desired page from state.action
   let action = 'login';
@@ -80,7 +80,7 @@ const handleOAuthSuccess = async (req, res, user, redirectPath = '/') => {
     res.cookie('token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       path: '/',
       domain: process.env.NODE_ENV === 'production' ? new URL(frontendUrl).hostname : undefined
