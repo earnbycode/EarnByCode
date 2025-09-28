@@ -77,17 +77,36 @@ dotenv.config({ path: path.join(__dirname, '.env'), override: true });
 // Do NOT set to true (all) to avoid permissive trust proxy issues
 app.set('trust proxy', 1);
 
-// --- CORS: local-only frontend ---
-const localCors = cors({
-  origin: 'http://localhost:5173',
+// --- CORS: allow localhost and optional deployed frontend(s) via env ---
+// FRONTEND_URL: single origin (e.g., https://your-site.vercel.app)
+// ALLOWED_ORIGINS: comma-separated list of extra origins
+const baseAllowed = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]);
+if (process.env.FRONTEND_URL) baseAllowed.add(String(process.env.FRONTEND_URL).trim());
+if (process.env.ALLOWED_ORIGINS) {
+  String(process.env.ALLOWED_ORIGINS)
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .forEach(o => baseAllowed.add(o));
+}
+
+const dynamicCors = cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow server-to-server and curl
+    if (baseAllowed.has(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization','X-Requested-With','x-application','X-Application','x-debug-key','X-Debug-Key'],
   exposedHeaders: ['Content-Type','Content-Length'],
   maxAge: 600,
 });
-app.use(localCors);
-app.options('*', localCors);
+app.use(dynamicCors);
+app.options('*', dynamicCors);
 
 // Environment check endpoint
 app.get('/api/env/check', (req, res) => {

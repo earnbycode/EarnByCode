@@ -1,4 +1,3 @@
 {
-  "note": "Vercel deployment is deprecated. This app is configured for local development only.",
-  "disabled": true
+  "version": 2
 }
