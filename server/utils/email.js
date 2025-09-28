@@ -41,14 +41,15 @@ let transporter = null;
 
 const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 const hasSmtpCreds = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+const EMAIL_DISABLED = /^(1|true|yes|on)$/i.test(process.env.EMAIL_DISABLE || '');
 const RAW_PROVIDER = process.env.EMAIL_PROVIDER || '';
 let EMAIL_PROVIDER = RAW_PROVIDER.toLowerCase();
 
-if (hasSmtpCreds) {
+if (hasSmtpCreds && !EMAIL_DISABLED) {
   transporter = nodemailer.createTransport(SMTP_CONFIG);
 }
 
-console.log(`[Email] Provider: ${hasSmtpCreds ? 'smtp' : 'none'} | Env: ${isProd ? 'production' : 'development'}`);
+console.log(`[Email] Provider: ${EMAIL_DISABLED ? 'disabled' : hasSmtpCreds ? 'smtp' : 'none'} | Env: ${isProd ? 'production' : 'development'}`);
 const from = process.env.EMAIL_FROM || 'not-set';
 console.log(`[Email] From: ${from}`);
 
@@ -64,18 +65,18 @@ const logEmail = (type, data) => {
     }
   });};
 
-// Verify connection configuration (only when SMTP creds exist)
-if (hasSmtpCreds && transporter) {
+// Verify connection configuration only in production to avoid noisy timeouts in local/dev
+if (!EMAIL_DISABLED && isProd && hasSmtpCreds && transporter) {
   transporter.verify((error, success) => {
     if (error) {
-      console.error('❌ Email configuration error:', error);
+      console.error('❌ Email configuration error:', error?.message || error);
       logEmail('CONFIG_ERROR', { error: error.message });
     } else {
       console.log('✅ Email server is ready to take our messages');
     }
   });
 } else if (!isProd) {
-  console.warn('⚠️ SMTP credentials not set. Emails will be logged only (dev mode).');
+  console.warn('⚠️ SMTP disabled in development. Emails will be simulated and logged.');
 }
 
 /**
@@ -94,15 +95,17 @@ if (hasSmtpCreds && transporter) {
 export const sendEmail = async ({ to, subject, text, html, attachments = [] }) => {
   try { logEmail('ATTEMPT', { to, subject, provider: hasSmtpCreds ? 'smtp' : 'none' }); } catch {}
 
-  // If SMTP is not configured
+  // In development: always simulate, regardless of SMTP creds
+  if (EMAIL_DISABLED || !isProd) {
+    const devMail = { from: process.env.EMAIL_FROM || 'dev@localhost', to, subject, text, html };
+    console.log('📧 [DEV] Simulate email send:', devMail);
+    logEmail('DEV_SIMULATED_SEND', devMail);
+    return { success: true, message: EMAIL_DISABLED ? 'Email disabled by config' : 'Simulated email send (development mode)' };
+  }
+
+  // In production: require SMTP credentials
   if (!hasSmtpCreds) {
-    const reason = 'No email provider configured (configure SMTP_* envs for SMTP sending)';
-    if (!isProd) {
-      const devMail = { from: process.env.EMAIL_FROM || 'dev@localhost', to, subject, text, html };
-      console.log('📧 [DEV] Simulate email send:', devMail);
-      logEmail('DEV_SIMULATED_SEND', devMail);
-      return { success: true, message: 'Simulated email send (dev mode, no SMTP configured)' };
-    }
+    const reason = 'No email provider configured (set SMTP_USER/SMTP_PASS)';
     console.error('❌ Email configuration error:', reason);
     logEmail('CONFIG_MISSING', { reason });
     return { success: false, message: reason };
