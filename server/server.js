@@ -82,7 +82,7 @@ app.set('trust proxy', 1);
 // ALLOWED_ORIGINS: comma-separated list of extra origins
 const baseAllowed = new Set([
   'http://localhost:5173',
-  'http://127.0.0.1:5173',
+  'https://earnbycode.vercel.app',
 ]);
 if (process.env.FRONTEND_URL) baseAllowed.add(String(process.env.FRONTEND_URL).trim());
 if (process.env.ALLOWED_ORIGINS) {
@@ -92,11 +92,14 @@ if (process.env.ALLOWED_ORIGINS) {
     .filter(Boolean)
     .forEach(o => baseAllowed.add(o));
 }
-
+const allowVercelPreviews = /^true$/i.test(String(process.env.ALLOW_VERCEL_PREVIEWS || ''));
 const dynamicCors = cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // allow server-to-server and curl
+    if (!origin) return callback(null, true);
     if (baseAllowed.has(origin)) return callback(null, true);
+    if (allowVercelPreviews && /^https?:\/\/[a-z0-9-]+\..*vercel\.app$/i.test(origin)) {
+      return callback(null, true);
+    }
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -107,6 +110,7 @@ const dynamicCors = cors({
 });
 app.use(dynamicCors);
 app.options('*', dynamicCors);
+console.log('[CORS] Allowed origins:', Array.from(baseAllowed).join(', '), allowVercelPreviews ? '(+ vercel previews enabled)' : '');
 
 // Environment check endpoint
 app.get('/api/env/check', (req, res) => {
